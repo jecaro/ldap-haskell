@@ -24,6 +24,7 @@ module LDAP.Init(ldapOpen,
                  ldapInit,
                  ldapInitialize,
                  ldapInitFd,
+                 ldapInstallTls,
                  ldapSimpleBind,
                  ldapExternalSaslBind)
 where
@@ -111,6 +112,14 @@ ldapInitFd fd proto uri =
                 ldapSetRestart p
             return ldap
 
+ldapInstallTls :: LDAP -- ^ LDAP Object
+               -> IO ()
+ldapInstallTls ld =
+    withLDAPPtr ld (\ptr -> do
+        r <- cldap_install_tls ptr
+        _ <- checkLE "ldapInstallTls" ld (return r)
+        return ())
+
 {- | Bind to the remote server. -}
 ldapSimpleBind :: LDAP          -- ^ LDAP Object
                -> String        -- ^ DN (Distinguished Name)
@@ -148,6 +157,9 @@ foreign import ccall unsafe "ldap.h ldap_initialize"
 
 foreign import ccall unsafe "openldap.h ldap_init_fd"
   cldap_init_fd :: CInt -> CInt -> CString -> Ptr LDAPPtr -> IO LDAPInt
+
+foreign import ccall unsafe "ldap.h ldap_install_tls"
+  cldap_install_tls :: LDAPPtr -> IO LDAPInt
 
 foreign import ccall safe "ldap.h ldap_simple_bind_s"
   ldap_simple_bind_s :: LDAPPtr -> CString -> CString -> IO LDAPInt
