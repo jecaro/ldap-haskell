@@ -23,6 +23,7 @@ Written by John Goerzen, jgoerzen\@complete.org
 module LDAP.Init(ldapOpen,
                  ldapInit,
                  ldapInitialize,
+                 ldapInitFd,
                  ldapSimpleBind,
                  ldapExternalSaslBind)
 where
@@ -32,6 +33,7 @@ import Foreign.ForeignPtr
 import Foreign.C.String
 import Foreign.Marshal.Alloc
 import Foreign.Storable
+import LDAP.Data
 import LDAP.Types
 import Foreign.C.Types
 import LDAP.Utils
@@ -92,6 +94,22 @@ ldapInitialize uri =
         ldapSetRestart p
     return ldap
 
+{- | Allows an LDAP structure to be initialized using an already-opened
+connection. -}
+ldapInitFd :: CInt          -- ^ File descriptor
+              -> LDAPProto  -- ^ Protocol
+              -> String     -- ^ URI
+              -> IO LDAP    -- ^ New LDAP Obj
+ldapInitFd fd proto uri =
+    withCString uri $ \cs ->
+        alloca $ \pp -> do
+            r <- cldap_init_fd fd (fromIntegral $ fromEnum proto) cs pp
+            ldap <- fromLDAPPtr "ldapInitFd" (peek pp)
+            _ <- checkLE "ldapInitFd" ldap (return r)
+            withForeignPtr ldap $ \p -> do
+                ldapSetVersion3 p
+                ldapSetRestart p
+            return ldap
 
 {- | Bind to the remote server. -}
 ldapSimpleBind :: LDAP          -- ^ LDAP Object
@@ -127,6 +145,9 @@ foreign import ccall safe "ldap.h ldap_open"
 
 foreign import ccall unsafe "ldap.h ldap_initialize"
   ldap_initialize :: Ptr LDAPPtr -> CString -> IO LDAPInt
+
+foreign import ccall unsafe "openldap.h ldap_init_fd"
+  cldap_init_fd :: CInt -> CInt -> CString -> Ptr LDAPPtr -> IO LDAPInt
 
 foreign import ccall safe "ldap.h ldap_simple_bind_s"
   ldap_simple_bind_s :: LDAPPtr -> CString -> CString -> IO LDAPInt

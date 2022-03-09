@@ -17,6 +17,7 @@ Written by John Goerzen, jgoerzen\@complete.org
 module LDAP.Data (module LDAP.Data) where
 
 #include "ldap.h"
+#include "openldap.h"
 
 
 data LDAPReturnCode =
@@ -47,7 +48,7 @@ data LDAPReturnCode =
  | LdapInvalidDnSyntax
  | LdapIsLeaf
  | LdapAliasDerefProblem
- | LdapProxyAuthzFailure
+ | LdapXProxyAuthzFailure
  | LdapInappropriateAuth
  | LdapInvalidCredentials
  | LdapInsufficientAccess
@@ -113,7 +114,7 @@ instance Enum LDAPReturnCode where
  toEnum (#{const LDAP_INVALID_DN_SYNTAX}) = LdapInvalidDnSyntax
  toEnum (#{const LDAP_IS_LEAF}) = LdapIsLeaf
  toEnum (#{const LDAP_ALIAS_DEREF_PROBLEM}) = LdapAliasDerefProblem
- toEnum (#{const LDAP_X_PROXY_AUTHZ_FAILURE}) = LdapProxyAuthzFailure
+ toEnum (#{const LDAP_X_PROXY_AUTHZ_FAILURE}) = LdapXProxyAuthzFailure
  toEnum (#{const LDAP_INAPPROPRIATE_AUTH}) = LdapInappropriateAuth
  toEnum (#{const LDAP_INVALID_CREDENTIALS}) = LdapInvalidCredentials
  toEnum (#{const LDAP_INSUFFICIENT_ACCESS}) = LdapInsufficientAccess
@@ -176,7 +177,7 @@ instance Enum LDAPReturnCode where
  fromEnum LdapInvalidDnSyntax = (#{const LDAP_INVALID_DN_SYNTAX})
  fromEnum LdapIsLeaf = (#{const LDAP_IS_LEAF})
  fromEnum LdapAliasDerefProblem = (#{const LDAP_ALIAS_DEREF_PROBLEM})
- fromEnum LdapProxyAuthzFailure = (#{const LDAP_X_PROXY_AUTHZ_FAILURE})
+ fromEnum LdapXProxyAuthzFailure = (#{const LDAP_X_PROXY_AUTHZ_FAILURE})
  fromEnum LdapInappropriateAuth = (#{const LDAP_INAPPROPRIATE_AUTH})
  fromEnum LdapInvalidCredentials = (#{const LDAP_INVALID_CREDENTIALS})
  fromEnum LdapInsufficientAccess = (#{const LDAP_INSUFFICIENT_ACCESS})
@@ -339,6 +340,35 @@ instance Ord LDAPModOp where
  compare x y = compare (fromEnum x) (fromEnum y)
 
 instance Eq LDAPModOp where
+ x == y = (fromEnum x) == (fromEnum y)
+
+
+data LDAPProto =
+   LdapProtoTcp
+ | LdapProtoUdp
+ | LdapProtoIpc
+ | LdapProtoExt
+ | UnknownLDAPProto Int
+
+ deriving (Show)
+
+instance Enum LDAPProto where
+ toEnum (#{const LDAP_PROTO_TCP}) = LdapProtoTcp
+ toEnum (#{const LDAP_PROTO_UDP}) = LdapProtoUdp
+ toEnum (#{const LDAP_PROTO_IPC}) = LdapProtoIpc
+ toEnum (#{const LDAP_PROTO_EXT}) = LdapProtoExt
+ toEnum x = UnknownLDAPProto x
+
+ fromEnum LdapProtoTcp = (#{const LDAP_PROTO_TCP})
+ fromEnum LdapProtoUdp = (#{const LDAP_PROTO_UDP})
+ fromEnum LdapProtoIpc = (#{const LDAP_PROTO_IPC})
+ fromEnum LdapProtoExt = (#{const LDAP_PROTO_EXT})
+ fromEnum (UnknownLDAPProto x) = x
+
+instance Ord LDAPProto where
+ compare x y = compare (fromEnum x) (fromEnum y)
+
+instance Eq LDAPProto where
  x == y = (fromEnum x) == (fromEnum y)
 
 

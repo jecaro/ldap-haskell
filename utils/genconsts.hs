@@ -54,7 +54,8 @@ modHeader =
  "Written by John Goerzen, jgoerzen\\@complete.org\n" ++
  "-}\n\n" ++
  "module LDAP.Data (module LDAP.Data) where\n" ++
- "\n#include \"ldap.h\"\n\n"
+ "\n#include \"ldap.h\"\n" ++
+ "#include \"openldap.h\"\n\n"
 
 main = 
     do putStrLn modHeader
@@ -62,6 +63,7 @@ main =
        putStrLn (errorClause "LDAPOptionCode" optionConsts)
        putStrLn (errorClause "LDAPScope" scopeConsts)
        putStrLn (errorClause "LDAPModOp" modConsts)
+       putStrLn (errorClause "LDAPProto" protoConsts)
 
 errorConsts = [
       "LDAP_SUCCESS", "LDAP_OPERATIONS_ERROR", "LDAP_PROTOCOL_ERROR", 
@@ -104,3 +106,5 @@ scopeConsts = [
       "LDAP_SCOPE_SUBTREE"]
 
 modConsts = ["LDAP_MOD_ADD", "LDAP_MOD_DELETE", "LDAP_MOD_REPLACE"]
+
+protoConsts = ["LDAP_PROTO_TCP", "LDAP_PROTO_UDP", "LDAP_PROTO_IPC", "LDAP_PROTO_EXT"]
