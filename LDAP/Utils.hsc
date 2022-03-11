@@ -168,7 +168,7 @@ bv2str :: Ptr Berval -> IO String
 bv2str bptr = 
     do (len::BERLen) <- ( #{peek struct berval, bv_len} ) bptr
        cstr <- ( #{peek struct berval, bv_val} ) bptr
-       peekCStringLen (cstr, fromIntegral len)
+       peekCAStringLen (cstr, fromIntegral len)
 
 {- | Must be freed later with freeHSBerval! -}
 
