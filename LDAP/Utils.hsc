@@ -29,7 +29,7 @@ module LDAP.Utils(checkLE, checkLEe, checkLEn1,
                   withLDAPPtr, maybeWithLDAPPtr, withMString,
                   withCStringArr0, ldap_memfree,
                   bv2str, newBerval, freeHSBerval,
-                  withAnyArr0) where
+                  withAnyArr0, withArrayOfForeign0) where
 import Foreign.Ptr
 import LDAP.Constants
 import LDAP.Exceptions
@@ -160,6 +160,10 @@ withAnyArr0 input2ptract freeact inp action =
     bracket (mapM input2ptract inp)
             (\clist -> mapM_ freeact clist)
             (\clist -> withArray0 nullPtr clist action)
+
+withArrayOfForeign0 :: Ptr a -> [ForeignPtr a] -> (Ptr (Ptr a) -> IO b) -> IO b
+withArrayOfForeign0 marker val ppa =
+    withMany withForeignPtr val $ \cval -> withArray0 marker cval (($) ppa)
 
 withBervalArr0 :: [String] -> (Ptr (Ptr Berval) -> IO a) -> IO a
 withBervalArr0 = withAnyArr0 newBerval freeHSBerval

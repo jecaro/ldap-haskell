@@ -21,7 +21,7 @@ Written by John Goerzen, jgoerzen\@complete.org
 -}
 
 module LDAP.Result (LDAPMessage, CLDAPMessage,
-                    ldap_1result
+                    ldap_1result, ldap_msgfree_call
                    ) where
 
 import LDAP.Utils
