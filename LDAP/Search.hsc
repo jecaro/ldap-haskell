@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {- -*- Mode: haskell; -*-
 Haskell LDAP Interface
 Copyright (C) 2005 John Goerzen <jgoerzen@complete.org>
@@ -22,10 +23,13 @@ Written by John Goerzen, jgoerzen\@complete.org
 
 module LDAP.Search (SearchAttributes(..),
                     LDAPEntry(..), LDAPScope(..),
-                    ldapSearch, 
+                    ldapSearch,
+                    ldapSearchExt,
+                    ldapParseResult
                    )
 where
 
+import LDAP.Control
 import LDAP.Utils
 import LDAP.Types
 import LDAP.TypesLL
@@ -37,8 +41,10 @@ import Foreign.C.Types(CInt(..))
 #endif
 import LDAP.Result
 import Control.Exception(finally)
+import Control.Monad ((<=<))
 
 #include <ldap.h>
+#include <sys/time.h>
 
 {- | Defines what attributes to return with the search result. -}
 data SearchAttributes =
@@ -57,6 +63,22 @@ data LDAPEntry = LDAPEntry
     ,leattrs :: [(String, [String])] -- ^ Mapping from attribute name to values
                            }
     deriving (Eq, Show)
+
+data TimeVal = TimeVal
+    {tvSec :: Int
+    ,tvUSec :: Int
+    } deriving Show
+
+instance Storable TimeVal where
+    sizeOf    _ = #{size struct timeval}
+    alignment _ = #{alignment struct timeval}
+    peek p = do
+        sec <- peek (#{ptr struct timeval, tv_sec} p)
+        usec <- peek (#{ptr struct timeval, tv_usec} p)
+        return $ TimeVal { tvSec = sec, tvUSec = usec }
+    poke p timeval = do
+        poke (#{ptr struct timeval, tv_sec} p) $ tvSec timeval
+        poke (#{ptr struct timeval, tv_usec} p) $ tvUSec timeval
 
 ldapSearch :: LDAP              -- ^ LDAP connection object
            -> Maybe String      -- ^ Base DN for search, if any
@@ -80,6 +102,45 @@ ldapSearch ld base scope filter attrs attrsonly =
                     )
                   )
 
+ldapSearchExt :: LDAP             -- ^ LDAP connection object
+              -> Maybe String     -- ^ Base DN for search, if any
+              -> LDAPScope        -- ^ Scope of the search
+              -> Maybe String     -- ^ Filter to be used (none if Nothing)
+              -> SearchAttributes -- ^ Desired attributes in result set
+              -> Bool             -- ^ If True, exclude attribute values (return types only)
+              -> [LDAPControl]    -- ^ Specifies a list of LDAP server controls
+              -> [LDAPControl]    -- ^ Specifies a list of LDAP server controls
+              -> Maybe TimeVal    -- ^ The local search timeout value
+              -> Int              -- ^ Specifies the maximum number of entries to return
+              -> IO (LDAPMessage)
+ldapSearchExt ld base scope filters attrs attrsonly serverctrls clientctrls timeout sizelimit =
+    withLDAPPtr ld $ \cld ->
+    withMString base $ \cbase ->
+    withMString filters $ \cfilters ->
+    withCStringArr0 (sa2sl attrs) $ \cattrs ->
+    withArrayOfForeign0 nullPtr serverctrls $ \cserverctrls ->
+    withArrayOfForeign0 nullPtr clientctrls $ \cclientctrls ->
+    maybeWith with timeout $ \ctimeout ->
+    alloca $ \cmsg -> do
+        let cscope = fromIntegral $ fromEnum scope
+            cattrsonly = fromBool attrsonly
+            csizelimit = CInt $ fromIntegral sizelimit
+        checkLE "ldapSearchExt" ld $
+            ldap_search_ext_s cld cbase cscope cfilters cattrs cattrsonly
+                cserverctrls cclientctrls ctimeout csizelimit cmsg
+        newForeignPtr ldap_msgfree_call =<< peek cmsg
+
+ldapParseResult :: LDAP -> LDAPMessage -> IO ([LDAPEntry], [LDAPControl])
+ldapParseResult ld msg =
+    withLDAPPtr ld $ \cld ->
+    withForeignPtr msg $ \cmsg ->
+    alloca $ \cctrl -> do
+        let cfreeit = fromBool False
+        checkLE "ldapParseResult" ld $
+            ldap_parse_result cld cmsg nullPtr nullPtr nullPtr nullPtr cctrl cfreeit
+        ctrls <- traverse (newForeignPtr ldap_control_free) =<< peekArray0 nullPtr =<< peek cctrl
+        (, ctrls) <$> procSRExt ld msg
+
 procSR :: LDAP -> Ptr CLDAP -> LDAPInt -> IO [LDAPEntry]
 procSR ld cld msgid =
   do res1 <- ldap_1result ld msgid
@@ -89,16 +150,33 @@ procSR ld cld msgid =
          if felm == nullPtr
             then return []
             else do --putStrLn "Have first entry"
-                    cdn <- ldap_get_dn cld felm -- FIXME: check null
-                    dn <- peekCString cdn
-                    ldap_memfree cdn
-                    attrs <- getattrs ld felm
+                    entry <- msg2Entry ld felm
                     next <- procSR ld cld msgid
                     --putStrLn $ "Next is " ++ (show next)
-                    return $ (LDAPEntry {ledn = dn, leattrs = attrs}):next
+                    return $ entry:next
                          )
-      
 
+procSRExt :: LDAP -> ForeignPtr CLDAPMessage -> IO [LDAPEntry]
+procSRExt ld msg =
+    withLDAPPtr ld $ \cld ->
+    withForeignPtr msg $
+        go cld <=< ldap_first_entry cld
+    where
+        go cld felm
+            | felm == nullPtr = return []
+            | otherwise = do
+                entry <- msg2Entry ld felm
+                next <- go cld =<< ldap_next_entry cld felm
+                pure $ entry:next
+
+msg2Entry :: LDAP -> Ptr CLDAPMessage -> IO LDAPEntry
+msg2Entry ld felm =
+    withLDAPPtr ld $ \cld -> do
+        cdn <- ldap_get_dn cld felm -- FIXME: check null
+        dn <- peekCString cdn
+        ldap_memfree cdn
+        attrs <- getattrs ld felm
+        return $ LDAPEntry {ledn = dn, leattrs = attrs}
 
 data BerElement
 
@@ -157,8 +235,16 @@ foreign import ccall safe "ldap.h ldap_search"
   ldap_search :: LDAPPtr -> CString -> LDAPInt -> CString -> Ptr CString ->
                  LDAPInt -> IO LDAPInt
 
+foreign import ccall safe "ldap.h ldap_search_ext_s"
+  ldap_search_ext_s :: LDAPPtr -> CString -> LDAPInt -> CString -> Ptr CString ->
+                       LDAPInt -> Ptr (Ptr CLDAPControl) -> Ptr (Ptr CLDAPControl) ->
+                       Ptr TimeVal -> CInt -> Ptr (Ptr CLDAPMessage)-> IO LDAPInt
+
 foreign import ccall unsafe "ldap.h ldap_first_entry"
   ldap_first_entry :: LDAPPtr -> Ptr CLDAPMessage -> IO (Ptr CLDAPMessage)
+
+foreign import ccall unsafe "ldap.h ldap_next_entry"
+  ldap_next_entry :: LDAPPtr -> Ptr CLDAPMessage -> IO (Ptr CLDAPMessage)
 
 foreign import ccall unsafe "ldap.h ldap_first_attribute"
   ldap_first_attribute :: LDAPPtr -> Ptr CLDAPMessage -> Ptr (Ptr BerElement) 
@@ -167,3 +253,9 @@ foreign import ccall unsafe "ldap.h ldap_first_attribute"
 foreign import ccall unsafe "ldap.h ldap_next_attribute"
   ldap_next_attribute :: LDAPPtr -> Ptr CLDAPMessage -> Ptr BerElement
                        -> IO CString
+
+foreign import ccall safe "ldap.h ldap_parse_result"
+  ldap_parse_result :: LDAPPtr -> Ptr CLDAPMessage -> Ptr LDAPInt ->
+                       Ptr (CString) -> Ptr (CString) -> Ptr (Ptr CString) ->
+                       Ptr (Ptr (Ptr CLDAPControl)) -> LDAPInt -> IO LDAPInt
+

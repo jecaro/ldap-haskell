@@ -32,6 +32,10 @@ module LDAP (-- * Basic Types
              module LDAP.Init,
              -- * Searching
              module LDAP.Search,
+             -- * Results
+             module LDAP.Result,
+             -- * Control
+             module LDAP.Control,
              -- * Adding, Deleting, and Altering
              module LDAP.Modify,
              -- * Error Handling
@@ -48,5 +52,7 @@ import LDAP.Init
 import LDAP.Data
 import LDAP.Constants
 import LDAP.Search hiding (LDAPScope(..))
+import LDAP.Result (LDAPMessage)
 import LDAP.Modify hiding (LDAPModOp(..))
+import LDAP.Control
 
