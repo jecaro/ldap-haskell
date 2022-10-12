@@ -128,7 +128,7 @@ ldapSearchExt ld base scope filters attrs attrsonly serverctrls clientctrls time
         checkLE "ldapSearchExt" ld $
             ldap_search_ext_s cld cbase cscope cfilters cattrs cattrsonly
                 cserverctrls cclientctrls ctimeout csizelimit cmsg
-        newForeignPtr ldap_msgfree_call =<< peek cmsg
+        newForeignPtr ldap_msgfree_call =<< checkNULL "ldapSearchExt" (peek cmsg)
 
 ldapParseResult :: LDAP -> LDAPMessage -> IO ([LDAPEntry], [LDAPControl])
 ldapParseResult ld msg =
